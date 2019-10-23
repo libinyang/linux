@@ -437,7 +437,7 @@ static const struct pci_device_id sof_pci_ids[] = {
 		.driver_data = (unsigned long)&tgl_desc},
 #endif
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_ELKHARTLAKE)
-	{ PCI_DEVICE(0x8086, 0x4b55),
+	{ PCI_DEVICE(0x8086, 0x4b58),
 		.driver_data = (unsigned long)&ehl_desc},
 #endif
 	{ 0, }
