@@ -376,6 +376,7 @@ struct snd_sof_widget {
 	 * from D3.
 	 */
 	bool dynamic_pipeline_widget;
+	bool defer_enable;
 
 	struct snd_soc_dapm_widget *widget;
 	struct list_head list;	/* list in sdev widget list */

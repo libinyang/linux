@@ -29,6 +29,8 @@ static const struct sof_topology_token ipc4_sched_tokens[] = {
 static const struct sof_topology_token pipeline_tokens[] = {
 	{SOF_TKN_SCHED_DYNAMIC_PIPELINE, SND_SOC_TPLG_TUPLE_TYPE_BOOL, get_token_u16,
 		offsetof(struct snd_sof_widget, dynamic_pipeline_widget)},
+	{SOF_TKN_SCHED_DEFER_ENABLE, SND_SOC_TPLG_TUPLE_TYPE_BOOL, get_token_u16,
+		offsetof(struct snd_sof_widget, defer_enable)},
 };
 
 static const struct sof_topology_token ipc4_comp_tokens[] = {
