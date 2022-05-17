@@ -429,6 +429,50 @@ static void sof_ipc4_widget_free_comp_pcm(struct snd_sof_widget *swidget)
 	swidget->private = NULL;
 }
 
+static inline void dump_base_cfg(struct device *dev, struct sof_ipc4_base_module_cfg *base_cfg)
+{
+	struct sof_ipc4_audio_format *audio_fmt;
+
+	if (!base_cfg) {
+		dev_err(dev, "in %s %d ylb, base_cfg is NULL\n", __func__, __LINE__);
+		return;
+	}
+
+	audio_fmt = &base_cfg->audio_fmt;
+	dev_err(dev, "in %s %d ylb, cpc: %d, ibs: %d, obs: %d, is_pages: %d\n", __func__, __LINE__, base_cfg->cpc,
+			base_cfg->ibs, base_cfg->obs, base_cfg->is_pages);
+	dev_err(dev, "in %s %d ylb, freq: %d, bit: %d, ch_map: %#x, ch_cfg: %d, interleaving_style: %d, fmt_cfg: %#x\n",
+			__func__, __LINE__, audio_fmt->sampling_frequency, audio_fmt->bit_depth, audio_fmt->ch_map,
+			audio_fmt->ch_cfg, audio_fmt->interleaving_style, audio_fmt->fmt_cfg);
+}
+
+static inline void dump_available_audio_fmt(struct device *dev, struct sof_ipc4_available_audio_format *available_audio_fmt)
+{
+	struct sof_ipc4_audio_format *audio_fmt;
+
+	dev_err(dev, "in %s %d ylb, audio_fmt_num: %d\n", __func__, __LINE__, available_audio_fmt->audio_fmt_num);
+
+	dump_base_cfg(dev, available_audio_fmt->base_config);
+
+	if (available_audio_fmt->out_audio_fmt) {
+		audio_fmt = available_audio_fmt->out_audio_fmt;
+		dev_err(dev, "in %s %d ylb, out freq: %d, bit: %d, ch_map: %#x, ch_cfg: %d, interleaving_style: %d, fmt_cfg: %#x\n",
+				__func__, __LINE__, audio_fmt->sampling_frequency, audio_fmt->bit_depth, audio_fmt->ch_map,
+				audio_fmt->ch_cfg, audio_fmt->interleaving_style, audio_fmt->fmt_cfg);
+	} else {
+		dev_err(dev, "in %s %d ylb, out_audio_fmt is NULL\n", __func__, __LINE__);
+	}
+
+	if (available_audio_fmt->ref_audio_fmt) {
+		audio_fmt = available_audio_fmt->ref_audio_fmt;
+		dev_err(dev, "in %s %d ylb, ref freq: %d, bit: %d, ch_map: %#x, ch_cfg: %d, interleaving_style: %d, fmt_cfg: %#x\n",
+				__func__, __LINE__, audio_fmt->sampling_frequency, audio_fmt->bit_depth, audio_fmt->ch_map,
+				audio_fmt->ch_cfg, audio_fmt->interleaving_style, audio_fmt->fmt_cfg);
+	} else {
+		dev_err(dev, "in %s %d ylb, ref_audio_fmt is NULL\n", __func__, __LINE__);
+	}
+}
+
 static int sof_ipc4_widget_setup_comp_dai(struct snd_sof_widget *swidget)
 {
 	struct sof_ipc4_available_audio_format *available_fmt;
