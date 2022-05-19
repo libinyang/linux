@@ -1548,6 +1548,15 @@ static int sof_ipc4_route_setup(struct snd_sof_dev *sdev, struct snd_sof_route *
 	dev_dbg(sdev->dev, "%s: bind %s -> %s\n", __func__,
 		src_widget->widget->name, sink_widget->widget->name);
 
+	if (!src_fw_module) {
+		dev_err(sdev->dev, "%s, src_fw_module is NULL\n", __func__);
+		return -ENODEV;
+	}
+	if (!sink_fw_module) {
+		dev_err(sdev->dev, "%s, sink_fw_module is NULL\n", __func__);
+		return -ENODEV;
+	}
+
 	header = src_fw_module->man4_module_entry.id;
 	header |= SOF_IPC4_MOD_INSTANCE(src_widget->instance_id);
 	header |= SOF_IPC4_MSG_TYPE_SET(SOF_IPC4_MOD_BIND);
