@@ -24,6 +24,11 @@
 #define sof_ipc4_dump_payload(sdev, ipc_data, size)	do { } while (0)
 #endif
 
+#define my_sof_ipc4_dump_payload(sdev, ipc_data, size)			\
+		print_hex_dump_debug("Message payload ylb: ",		\
+				     DUMP_PREFIX_OFFSET,		\
+				     16, 4, ipc_data, size, false)
+
 static const struct sof_ipc4_fw_status {
 	int status;
 	char *msg;
@@ -330,6 +335,237 @@ static int ipc4_wait_tx_done(struct snd_sof_ipc *ipc, void *reply_data)
 	return ret;
 }
 
+static char *ipc4_header_type[] = {"0 SOF_IPC4_GLB_BOOT_CONFIG", "1 SOF_IPC4_GLB_ROM_CONTROL",
+								   "2 SOF_IPC4_GLB_IPCGATEWAY_CMD", "RSVD3", "RSVD4",
+								   "RSVD5", "RSVD6", "RSVD7", "RSVD8",
+								   "RSVD9", "RSVD10", "RSVD11", "RSVD12",
+								   "13 SOF_IPC4_GLB_PERF_MEASUREMENTS_CMD",
+								   "14 SOF_IPC4_GLB_CHAIN_DMA", "15 SOF_IPC4_GLB_LOAD_MULTIPLE_MODULES",
+								   "16 SOF_IPC4_GLB_UNLOAD_MULTIPLE_MODULES",
+								   "17 SOF_IPC4_GLB_CREATE_PIPELINE", "18 SOF_IPC4_GLB_DELETE_PIPELINE",
+								   "19 SOF_IPC4_GLB_SET_PIPELINE_STATE", "20 SOF_IPC4_GLB_GET_PIPELINE_STATE",
+								   "21 SOF_IPC4_GLB_GET_PIPELINE_CONTEXT_SIZE", "22 SOF_IPC4_GLB_SAVE_PIPELINE",
+								   "23 SOF_IPC4_GLB_RESTORE_PIPELINE", "24 SOF_IPC4_GLB_LOAD_LIBRARY",
+								   "RSVD25", "26 SOF_IPC4_GLB_INTERNAL_MESSAGE",
+								   "27 SOF_IPC4_GLB_NOTIFICATION", "RSVD28 SOF_IPC4_GLB_TYPE_LAST", "RSVD29",
+								   "RSVD30", "RSVD31"};
+
+static char *ipc4_header_dir[] = {"0 SOF_IPC4_MSG_REQUEST", "1 SOF_IPC4_MSG_REPLY"};
+
+static char *ipc4_header_target[] = {"0 SOF_IPC4_FW_GEN_MSG", "1 SOF_IPC4_MODULE_MSG"};
+
+static char *ipc4_header_pp_state[] = {"0 SOF_IPC4_PIPE_INVALID_STATE", "1 SOF_IPC4_PIPE_UNINITIALIZED",
+									 "2 SOF_IPC4_PIPE_RESET", "3 SOF_IPC4_PIPE_PAUSED",
+									 "4 SOF_IPC4_PIPE_RUNNING", "5 SOF_IPC4_PIPE_EOS"};
+static char *ipc4_header_mod[] = {
+	"0 SOF_IPC4_MOD_INIT_INSTANCE",
+	"1 SOF_IPC4_MOD_CONFIG_GET",
+	"2 SOF_IPC4_MOD_CONFIG_SET",
+	"3 SOF_IPC4_MOD_LARGE_CONFIG_GET",
+	"4 SOF_IPC4_MOD_LARGE_CONFIG_SET",
+	"5 SOF_IPC4_MOD_BIND",
+	"6 SOF_IPC4_MOD_UNBIND",
+	"7 SOF_IPC4_MOD_SET_DX",
+	"8 SOF_IPC4_MOD_SET_D0IX",
+	"9 SOF_IPC4_MOD_ENTER_MODULE_RESTORE",
+	"10 SOF_IPC4_MOD_EXIT_MODULE_RESTORE",
+	"11 SOF_IPC4_MOD_DELETE_INSTANCE"
+};
+
+/*
+ * header:
+ * bit 30: target,	SOF_IPC4_MSG_TARGET_SHIFT, SOF_IPC4_MSG_TARGET_MASK
+ * bit 29: dir, SOF_IPC4_GLB_MSG_DIR_SHIFT, SOF_IPC4_GLB_MSG_DIR_MASK
+ * bit 24 - 28: type, SOF_IPC4_MSG_TYPE_SHIFT, SOF_IPC4_MSG_TYPE_MASK
+ * -----
+ * bit 16 - 23: instance, SOF_IPC4_GLB_PIPE_INSTANCE_SHIFT, SOF_IPC4_GLB_PIPE_INSTANCE_MASK
+ * bit 11 - 15: priority, SOF_IPC4_GLB_PIPE_PRIORITY_SHIFT, SOF_IPC4_GLB_PIPE_PRIORITY_MASK
+ * bit 0 - 10: mem_size, SOF_IPC4_GLB_PIPE_MEM_SIZE_SHIFT, SOF_IPC4_GLB_PIPE_MEM_SIZE_MASK
+ * -----
+ * bit 16 - 23: pipe_state_id, SOF_IPC4_GLB_PIPE_STATE_ID_SHIFT, SOF_IPC4_GLB_PIPE_STATE_ID_MASK
+ * bit 0 - 15: pipe_state, SOF_IPC4_GLB_PIPE_STATE_SHIFT, SOF_IPC4_GLB_PIPE_STATE_MASK
+ * -----
+ * bit 16 - 23: mod_instance_id, SOF_IPC4_MOD_INSTANCE_SHIFT, SOF_IPC4_MOD_INSTANCE_MASK
+ * bit 0 - 15: mod_id, SOF_IPC4_MOD_ID_SHIFT, SOF_IPC4_MOD_ID_MASK
+ * ===============================
+ * extension:
+ * init module:
+ * bit 0 - 15: param_size, SOF_IPC4_MOD_EXT_PARAM_SIZE_SHIFT, SOF_IPC4_MOD_EXT_PARAM_SIZE_MASK
+ * bit 16 - 23: ppl_id, SOF_IPC4_MOD_EXT_PPL_ID_SHIFT, SOF_IPC4_MOD_EXT_PPL_ID_MASK
+ * bit 24 - 27: core_id, SOF_IPC4_MOD_EXT_CORE_ID_SHIFT, SOF_IPC4_MOD_EXT_CORE_ID_MASK
+ * bit 28: domain, SOF_IPC4_MOD_EXT_DOMAIN_SHIFT, SOF_IPC4_MOD_EXT_DOMAIN_MASK
+ * -----
+ * bind/unbind module:
+ * bit 0 - 15: dst_mod_id, SOF_IPC4_MOD_EXT_DST_MOD_ID_SHIFT, SOF_IPC4_MOD_EXT_DST_MOD_ID_MASK
+ * bit 16 - 23: dst_mod_instance, SOF_IPC4_MOD_EXT_DST_MOD_INSTANCE_SHIFT, SOF_IPC4_MOD_EXT_DST_MOD_INSTANCE_MASK
+ * bit 24 - 26: dst_mod_queue_id, SOF_IPC4_MOD_EXT_DST_MOD_QUEUE_ID_SHIFT, SOF_IPC4_MOD_EXT_DST_MOD_QUEUE_ID_MASK
+ * bit 27 - 29: src_mod_queue_id, SOF_IPC4_MOD_EXT_SRC_MOD_QUEUE_ID_SHIFT, SOF_IPC4_MOD_EXT_SRC_MOD_QUEUE_ID_MASK
+ * -----
+ * set module large config:
+ * bit 0 - 19: msg_size, SOF_IPC4_MOD_EXT_MSG_SIZE_SHIFT, SOF_IPC4_MOD_EXT_MSG_SIZE_MASK
+ * bit 20 - 27: param_id, SOF_IPC4_MOD_EXT_MSG_PARAM_ID_SHIFT, SOF_IPC4_MOD_EXT_MSG_PARAM_ID_MASK
+ * bit 28: last_block, SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_SHIFT, SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_MASK
+ * bit 29: first_block, SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_SHIFT, SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_MASK
+ */
+static inline void ipc4_dump(struct snd_sof_dev *sdev, struct sof_ipc4_msg *msg)
+{
+	char *target = ipc4_header_target[(msg->primary & SOF_IPC4_MSG_TARGET_MASK) >> SOF_IPC4_MSG_TARGET_SHIFT];
+	char *dir = ipc4_header_dir[(msg->primary & SOF_IPC4_MSG_DIR_MASK) >> SOF_IPC4_MSG_DIR_SHIFT];
+	char *type = ipc4_header_type[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+	u32 instance = (msg->primary & SOF_IPC4_GLB_PIPE_INSTANCE_MASK) >> SOF_IPC4_GLB_PIPE_INSTANCE_SHIFT;
+	u32 priority = (msg->primary & SOF_IPC4_GLB_PIPE_PRIORITY_MASK) >>	SOF_IPC4_GLB_PIPE_PRIORITY_SHIFT;
+	u32 mem_size = (msg->primary & SOF_IPC4_GLB_PIPE_MEM_SIZE_MASK) >> SOF_IPC4_GLB_PIPE_MEM_SIZE_SHIFT;
+	u32 pp_state_id = (msg->primary & SOF_IPC4_GLB_PIPE_STATE_ID_MASK) >> SOF_IPC4_GLB_PIPE_STATE_ID_SHIFT;
+	char *pp_state;
+	u32 mod_instance_id = (msg->primary &  SOF_IPC4_MOD_INSTANCE_MASK) >> SOF_IPC4_MOD_INSTANCE_SHIFT;
+	u32 mod_id = (msg->primary &  SOF_IPC4_MOD_ID_MASK) >> SOF_IPC4_MOD_ID_SHIFT;
+	u32 param_size, ppl_id, core_id, domain;
+	u32 dst_mod_id, dst_mod_instance, dst_mod_queue_id, src_mod_queue_id;
+	u32 msg_size, param_id, last_block, first_block;
+	char *mod_type;
+
+	dev_err(sdev->dev, "======================================\n");
+	dev_err(sdev->dev, "primary: %#x, extension: %#x\n", msg->primary, msg->extension);
+
+	switch (SOF_IPC4_MSG_TYPE_GET(msg->primary)) {
+	case SOF_IPC4_GLB_BOOT_CONFIG: //also mod init
+		if ((msg->primary & SOF_IPC4_MSG_TARGET_MASK) == (SOF_IPC4_MSG_TARGET(SOF_IPC4_FW_GEN_MSG)))
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		else {
+			mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+			param_size = ((msg->extension & SOF_IPC4_MOD_EXT_PARAM_SIZE_MASK) >> SOF_IPC4_MOD_EXT_PARAM_SIZE_SHIFT) << 2;
+			ppl_id = (msg->extension & SOF_IPC4_MOD_EXT_PPL_ID_MASK) >> SOF_IPC4_MOD_EXT_PPL_ID_SHIFT;
+			core_id = (msg->extension & SOF_IPC4_MOD_EXT_CORE_ID_MASK) >> SOF_IPC4_MOD_EXT_CORE_ID_SHIFT;
+			domain = (msg->extension & SOF_IPC4_MOD_EXT_DOMAIN_MASK) >> SOF_IPC4_MOD_EXT_DOMAIN_SHIFT;
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+			dev_err(sdev->dev, "in %s %d ylb, extension, param_size: %d, ppl_id: %d, core_id: %d, domain: %d\n", __func__, __LINE__, param_size, ppl_id, core_id, domain);
+		}
+		break;
+	case SOF_IPC4_GLB_ROM_CONTROL: // alsa mod config get
+		if ((msg->primary & SOF_IPC4_MSG_TARGET_MASK) == (SOF_IPC4_MSG_TARGET(SOF_IPC4_FW_GEN_MSG)))
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		else {
+			mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+			dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		}
+		break;
+	case SOF_IPC4_GLB_IPCGATEWAY_CMD: // alsa mod config set
+		if ((msg->primary & SOF_IPC4_MSG_TARGET_MASK) == (SOF_IPC4_MSG_TARGET(SOF_IPC4_FW_GEN_MSG)))
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		else {
+			mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+			dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d, not happen\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+			dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		}
+		break;
+	case SOF_IPC4_MOD_LARGE_CONFIG_GET:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		msg_size =	(msg->extension & SOF_IPC4_MOD_EXT_MSG_SIZE_MASK) >> SOF_IPC4_MOD_EXT_MSG_SIZE_SHIFT;
+		param_id = (msg->extension & SOF_IPC4_MOD_EXT_MSG_PARAM_ID_MASK) >> SOF_IPC4_MOD_EXT_MSG_PARAM_ID_SHIFT;
+		last_block = (msg->extension & SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_MASK) >> SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_SHIFT;
+		first_block = (msg->extension & SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_MASK) >> SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_SHIFT;
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, msg_size: %d, param_id: %d, last_block: %d, first_block: %d, not happen!!!\n", __func__, __LINE__, msg_size, param_id, last_block, first_block);
+		break;
+	case SOF_IPC4_MOD_LARGE_CONFIG_SET:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		msg_size =	(msg->extension & SOF_IPC4_MOD_EXT_MSG_SIZE_MASK) >> SOF_IPC4_MOD_EXT_MSG_SIZE_SHIFT;
+		param_id = (msg->extension & SOF_IPC4_MOD_EXT_MSG_PARAM_ID_MASK) >> SOF_IPC4_MOD_EXT_MSG_PARAM_ID_SHIFT;
+		last_block = (msg->extension & SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_MASK) >> SOF_IPC4_MOD_EXT_MSG_LAST_BLOCK_SHIFT;
+		first_block = (msg->extension & SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_MASK) >> SOF_IPC4_MOD_EXT_MSG_FIRST_BLOCK_SHIFT;
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, msg_size: %d, param_id: %d, last_block: %d, first_block: %d\n", __func__, __LINE__, msg_size, param_id, last_block, first_block);
+		break;
+	case SOF_IPC4_MOD_BIND:
+	case SOF_IPC4_MOD_UNBIND:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dst_mod_id = (msg->extension & SOF_IPC4_MOD_EXT_DST_MOD_ID_MASK) >> SOF_IPC4_MOD_EXT_DST_MOD_ID_SHIFT;
+		dst_mod_instance = (msg->extension & SOF_IPC4_MOD_EXT_DST_MOD_INSTANCE_MASK) >> SOF_IPC4_MOD_EXT_DST_MOD_INSTANCE_SHIFT;
+		dst_mod_queue_id = (msg->extension & SOF_IPC4_MOD_EXT_DST_MOD_QUEUE_ID_MASK) >> SOF_IPC4_MOD_EXT_DST_MOD_QUEUE_ID_SHIFT;
+		src_mod_queue_id = (msg->extension & SOF_IPC4_MOD_EXT_SRC_MOD_QUEUE_ID_MASK) >> SOF_IPC4_MOD_EXT_SRC_MOD_QUEUE_ID_SHIFT;
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, src mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, dst_mod_id: %d, dst_mod_instance: %d, dst_mod_queue_id: %d, src_mod_queue_id: %d\n", __func__, __LINE__, dst_mod_id, dst_mod_instance, dst_mod_queue_id, src_mod_queue_id);
+		break;
+	case SOF_IPC4_MOD_SET_DX:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		break;
+	case SOF_IPC4_MOD_SET_D0IX:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		break;
+	case SOF_IPC4_MOD_ENTER_MODULE_RESTORE:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		break;
+	case SOF_IPC4_MOD_EXIT_MODULE_RESTORE:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, not happen!!!\n", __func__, __LINE__);
+		break;
+	case SOF_IPC4_MOD_DELETE_INSTANCE:
+		mod_type = ipc4_header_mod[(msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, mod_id: %d\n", __func__, __LINE__, target, dir, mod_type, mod_instance_id, mod_id);
+		dev_err(sdev->dev, "in %s %d ylb, extension, extension = NULL\n", __func__, __LINE__);
+		break;
+	case SOF_IPC4_GLB_PERF_MEASUREMENTS_CMD:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_CHAIN_DMA:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_LOAD_MULTIPLE_MODULES:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_UNLOAD_MULTIPLE_MODULES:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_CREATE_PIPELINE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_DELETE_PIPELINE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_SET_PIPELINE_STATE:
+		pp_state = ipc4_header_pp_state[(msg->primary & SOF_IPC4_GLB_PIPE_STATE_MASK) >> SOF_IPC4_GLB_PIPE_STATE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, pp_state_id: %d, pp_state: %s\n", __func__, __LINE__, target, dir, type, pp_state_id, pp_state);
+		break;
+	case SOF_IPC4_GLB_GET_PIPELINE_STATE:
+		pp_state = ipc4_header_pp_state[(msg->primary & SOF_IPC4_GLB_PIPE_STATE_MASK) >> SOF_IPC4_GLB_PIPE_STATE_SHIFT];
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, pp_state_id: %d, pp_state: %s\n, not happen!!!", __func__, __LINE__, target, dir, type, pp_state_id, pp_state);
+		break;
+	case SOF_IPC4_GLB_GET_PIPELINE_CONTEXT_SIZE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_SAVE_PIPELINE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_RESTORE_PIPELINE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_LOAD_LIBRARY:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_INTERNAL_MESSAGE:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_NOTIFICATION:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	case SOF_IPC4_GLB_TYPE_LAST:
+		dev_err(sdev->dev, "in %s %d ylb, target: %s, dir: %s, type: %s, instance: %d, prio: %d, mem_size: %d, not happen!!!\n", __func__, __LINE__, target, dir, type, instance, priority, mem_size);
+		break;
+	default:
+		dev_err(sdev->dev, "in %s %d ylb, Unknown msg type %ld\n", __func__, __LINE__, (msg->primary & SOF_IPC4_MSG_TYPE_MASK) >> SOF_IPC4_MSG_TYPE_SHIFT);
+		break;
+	}
+	my_sof_ipc4_dump_payload(sdev, msg->data_ptr, msg->data_size);
+}
+
 static int ipc4_tx_msg_unlocked(struct snd_sof_ipc *ipc,
 				void *msg_data, size_t msg_bytes,
 				void *reply_data, size_t reply_bytes)
@@ -342,6 +578,7 @@ static int ipc4_tx_msg_unlocked(struct snd_sof_ipc *ipc,
 		return -EINVAL;
 
 	ret = sof_ipc_send_msg(sdev, msg_data, msg_bytes, reply_bytes);
+	ipc4_dump(sdev, msg_data);
 	if (ret) {
 		dev_err_ratelimited(sdev->dev,
 				    "%s: ipc message send for %#x|%#x failed: %d\n",
