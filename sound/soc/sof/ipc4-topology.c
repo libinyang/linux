@@ -1804,6 +1804,13 @@ static int sof_ipc4_route_setup(struct snd_sof_dev *sdev, struct snd_sof_route *
 		return -ENODEV;
 	}
 
+	if (!strcmp(src_widget->widget->name, "kpb.14.1")) {
+		if (!strcmp(sink_widget->widget->name, "copier.host.13.1"))
+			src_queue = 1;
+		if (!strcmp(sink_widget->widget->name, "micsel.15.1"))
+			src_queue = 0;
+	}
+
 	header = src_fw_module->man4_module_entry.id;
 	header |= SOF_IPC4_MOD_INSTANCE(src_widget->instance_id);
 	header |= SOF_IPC4_MSG_TYPE_SET(SOF_IPC4_MOD_BIND);
@@ -1815,6 +1822,10 @@ static int sof_ipc4_route_setup(struct snd_sof_dev *sdev, struct snd_sof_route *
 	extension |= SOF_IPC4_MOD_EXT_DST_MOD_QUEUE_ID(dst_queue);
 	extension |= SOF_IPC4_MOD_EXT_SRC_MOD_QUEUE_ID(src_queue);
 
+	if (!strcmp(src_widget->widget->name, "kpb.14.1")) {
+		dev_err(sdev->dev, "in %s %d ylb, bind kpb to %s, extension: %#x\n", __func__, __LINE__, sink_widget->widget->name, extension);
+	}
+
 	msg.primary = header;
 	msg.extension = extension;
 
@@ -1822,6 +1833,18 @@ static int sof_ipc4_route_setup(struct snd_sof_dev *sdev, struct snd_sof_route *
 	if (ret < 0)
 		dev_err(sdev->dev, "%s: failed to bind modules %s -> %s\n",
 			__func__, src_widget->widget->name, sink_widget->widget->name);
+
+	if (!strcmp(src_widget->widget->name, "kpb.14.1")) {
+		if (!strcmp(sink_widget->widget->name, "copier.host.13.1")) {
+			dev_err(sdev->dev, "%s %d ylb, set kpb largeconfig\n", __func__, __LINE__);
+			u32 large_data[5] = {0x00000101, 0x00000008, 0x00000001, 0x00010004};
+			msg.primary = 0x44000007;
+			msg.extension = 0x3FF00010;
+			msg.data_ptr = large_data;
+			msg.data_size = 0x10;
+			sdev->ipc->ops->set_get_data(sdev, &msg, 0x10, true);
+		}
+	}
 
 	return ret;
 }
