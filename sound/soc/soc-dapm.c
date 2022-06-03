@@ -82,6 +82,7 @@ static int dapm_up_seq[] = {
 	[snd_soc_dapm_output] = 6,
 	[snd_soc_dapm_mux] = 7,
 	[snd_soc_dapm_demux] = 7,
+	[snd_soc_dapm_micsel] = 7,
 	[snd_soc_dapm_dac] = 8,
 	[snd_soc_dapm_switch] = 9,
 	[snd_soc_dapm_mixer] = 9,
@@ -133,6 +134,7 @@ static int dapm_down_seq[] = {
 	[snd_soc_dapm_vmid] = 9,
 	[snd_soc_dapm_mux] = 10,
 	[snd_soc_dapm_demux] = 10,
+	[snd_soc_dapm_micsel] = 10,
 	[snd_soc_dapm_aif_in] = 11,
 	[snd_soc_dapm_aif_out] = 11,
 	[snd_soc_dapm_dai_in] = 11,
@@ -3713,6 +3715,7 @@ snd_soc_dapm_new_control_unlocked(struct snd_soc_dapm_context *dapm,
 	case snd_soc_dapm_demux:
 	case snd_soc_dapm_switch:
 	case snd_soc_dapm_mixer:
+	case snd_soc_dapm_micsel:
 	case snd_soc_dapm_mixer_named_ctl:
 	case snd_soc_dapm_adc:
 	case snd_soc_dapm_aif_out:

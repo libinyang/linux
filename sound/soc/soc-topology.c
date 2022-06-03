@@ -184,6 +184,7 @@ static const struct soc_tplg_map dapm_map[] = {
 	{SND_SOC_TPLG_DAPM_ASRC, snd_soc_dapm_asrc},
 	{SND_SOC_TPLG_DAPM_ENCODER, snd_soc_dapm_encoder},
 	{SND_SOC_TPLG_DAPM_DECODER, snd_soc_dapm_decoder},
+	{SND_SOC_TPLG_DAPM_MICSEL, snd_soc_dapm_micsel},
 };
 
 static int tplc_chan_get_reg(struct soc_tplg *tplg,

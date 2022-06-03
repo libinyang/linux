@@ -1333,6 +1333,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	case snd_soc_dapm_siggen:
 	case snd_soc_dapm_mux:
 	case snd_soc_dapm_demux:
+	case snd_soc_dapm_micsel:
 		ret = sof_widget_parse_tokens(scomp, swidget, tw,  token_list, token_list_size);
 		break;
 	case snd_soc_dapm_switch:

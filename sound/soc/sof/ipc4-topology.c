@@ -800,6 +800,47 @@ static void sof_ipc4_widget_free_comp_mixer(struct snd_sof_widget *swidget)
 	swidget->private = NULL;
 }
 
+static int sof_ipc4_widget_setup_comp_micsel(struct snd_sof_widget *swidget)
+{
+	struct snd_soc_component *scomp = swidget->scomp;
+	struct sof_ipc4_micsel *micsel;
+	int ret;
+
+	micsel = kzalloc(sizeof(*micsel), GFP_KERNEL);
+	if (!micsel)
+		return -ENOMEM;
+
+	swidget->private = micsel;
+
+	ret = sof_ipc4_get_audio_fmt(scomp, swidget, &micsel->available_fmt, true);
+	if (ret)
+		goto err;
+
+	dump_available_audio_fmt(scomp->dev, &micsel->available_fmt);
+
+	ret = sof_ipc4_widget_setup_msg(swidget, &micsel->msg);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	kfree(micsel);
+	swidget->private = NULL;
+	return ret;
+}
+
+static void sof_ipc4_widget_free_comp_micsel(struct snd_sof_widget *swidget)
+{
+	struct sof_ipc4_micsel *micsel = swidget->private;
+
+	if (!micsel)
+		return;
+
+	sof_ipc4_free_audio_fmt(&micsel->available_fmt);
+	kfree(swidget->private);
+	swidget->private = NULL;
+}
+
 static void
 sof_ipc4_update_pipeline_mem_usage(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget,
 				   struct sof_ipc4_base_module_cfg *base_config)
@@ -1366,6 +1407,33 @@ static int sof_ipc4_prepare_mixer_module(struct snd_sof_widget *swidget,
 	return sof_ipc4_widget_assign_instance_id(sdev, swidget);
 }
 
+static int sof_ipc4_prepare_micsel_module(struct snd_sof_widget *swidget,
+					 struct snd_pcm_hw_params *fe_params,
+					 struct snd_sof_platform_stream_params *platform_params,
+					 struct snd_pcm_hw_params *pipeline_params, int dir)
+{
+	struct snd_soc_component *scomp = swidget->scomp;
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct sof_ipc4_micsel *micsel = swidget->private;
+	int ret;
+
+	micsel->available_fmt.ref_audio_fmt = &micsel->available_fmt.base_config->audio_fmt;
+
+	ret = sof_ipc4_init_audio_fmt(sdev, swidget, &micsel->base_config,
+					  NULL, pipeline_params, &micsel->available_fmt,
+					  sizeof(micsel->base_config));
+	if (ret < 0)
+		return ret;
+
+	memcpy(&micsel->output_format, micsel->available_fmt.out_audio_fmt, sizeof(struct sof_ipc4_audio_format));
+
+	/* update pipeline memory usage */
+	sof_ipc4_update_pipeline_mem_usage(sdev, swidget, &micsel->base_config);
+
+	/* assign instance ID */
+	return sof_ipc4_widget_assign_instance_id(sdev, swidget);
+}
+
 static int sof_ipc4_control_load_volume(struct snd_sof_dev *sdev, struct snd_sof_control *scontrol)
 {
 	struct sof_ipc4_control_data *control_data;
@@ -1476,6 +1544,17 @@ static int sof_ipc4_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget
 		ipc_data = &mixer->base_config;
 
 		msg = &mixer->msg;
+		break;
+	}
+	case snd_soc_dapm_micsel:
+	{
+		struct sof_ipc4_micsel *micsel = swidget->private;
+
+		ipc_size = sizeof(struct sof_ipc4_base_module_cfg) +
+			sizeof(struct sof_ipc4_audio_format);
+		ipc_data = micsel;
+
+		msg = &micsel->msg;
 		break;
 	}
 	default:
@@ -1823,6 +1902,15 @@ static enum sof_tokens mixer_token_list[] = {
 	SOF_COMP_EXT_TOKENS,
 };
 
+static enum sof_tokens micsel_token_list[] = {
+	SOF_COMP_TOKENS,
+	SOF_AUDIO_FMT_NUM_TOKENS,
+	SOF_IN_AUDIO_FORMAT_TOKENS,
+	SOF_OUT_AUDIO_FORMAT_TOKENS,
+	SOF_AUDIO_FORMAT_BUFFER_SIZE_TOKENS,
+	SOF_COMP_EXT_TOKENS,
+};
+
 static const struct sof_ipc_tplg_widget_ops tplg_ipc4_widget_ops[SND_SOC_DAPM_TYPE_COUNT] = {
 	[snd_soc_dapm_aif_in] =  {sof_ipc4_widget_setup_pcm, sof_ipc4_widget_free_comp_pcm,
 				  host_token_list, ARRAY_SIZE(host_token_list), NULL,
@@ -1850,6 +1938,10 @@ static const struct sof_ipc_tplg_widget_ops tplg_ipc4_widget_ops[SND_SOC_DAPM_TY
 	[snd_soc_dapm_mixer] = {sof_ipc4_widget_setup_comp_mixer, sof_ipc4_widget_free_comp_mixer,
 				mixer_token_list, ARRAY_SIZE(mixer_token_list),
 				NULL, sof_ipc4_prepare_mixer_module,
+				sof_ipc4_unprepare_generic_module},
+	[snd_soc_dapm_micsel] = {sof_ipc4_widget_setup_comp_micsel, sof_ipc4_widget_free_comp_micsel,
+				micsel_token_list, ARRAY_SIZE(micsel_token_list),
+				NULL, sof_ipc4_prepare_micsel_module,
 				sof_ipc4_unprepare_generic_module},
 };
 

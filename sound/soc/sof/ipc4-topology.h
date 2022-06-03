@@ -242,4 +242,18 @@ struct sof_ipc4_mixer {
 	struct sof_ipc4_msg msg;
 };
 
+/**
+ * struct sof_ipc4_micsel - micsel config data
+ * @base_config: IPC base config data
+ * @output_format: output audio format
+ * @available_fmt: Available audio format
+ * @msg: IPC4 message struct containing header and data info
+ */
+struct sof_ipc4_micsel {
+	struct sof_ipc4_base_module_cfg base_config;
+	struct sof_ipc4_audio_format output_format;
+	struct sof_ipc4_available_audio_format available_fmt;
+	struct sof_ipc4_msg msg;
+};
+
 #endif
