@@ -784,5 +784,6 @@ int cnl_ipc4_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg);
 irqreturn_t hda_dsp_ipc4_irq_thread(int irq, void *context);
 int hda_dsp_ipc4_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg);
 extern struct sdw_intel_ops sdw_callback;
+int hda_dsp_ipc4_load_library(struct snd_sof_dev *sdev, struct firmware *fw, u32 id);
 
 #endif
