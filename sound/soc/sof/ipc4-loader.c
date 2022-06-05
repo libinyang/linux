@@ -186,7 +186,7 @@ static size_t sof_ipc4_fw_parse_ext_man(struct snd_sof_dev *sdev)
 
 			dev_dbg(sdev->dev,
 				"module %s: UUID %pUL cfg_count: %u, bss_size: %#x\n",
-				fm_entry->name, ipc4_data->base_fw_module_uuids[i],
+				fm_entry->name, &ipc4_data->base_fw_module_uuids[i],
 				fm_entry->cfg_count, fw_module->bss_size);
 		} else {
 			fw_module->bss_size = 0;
