@@ -21,10 +21,11 @@ static size_t sof_ipc4_lib_parse_ext_man(struct snd_sof_dev *sdev, const struct 
 	struct sof_man4_fw_binary_header *fw_header;
 	struct sof_ext_manifest4_hdr *ext_man_hdr;
 	struct sof_man4_module_config *fm_config;
+	struct sof_ipc4_fw_module *fw_module;
 	struct sof_man4_module *fm_entry;
 	ssize_t remaining;
 	u32 fw_hdr_offset;
-	int i;
+	int i, old_num_fw_modules, new_num_fw_modules;
 
 	remaining = fw->size;
 	if (remaining <= sizeof(*ext_man_hdr)) {
@@ -59,6 +60,27 @@ static size_t sof_ipc4_lib_parse_ext_man(struct snd_sof_dev *sdev, const struct 
 	dev_dbg(sdev->dev, "Firmware name: %s, header length: %u, module count: %u\n",
 		fw_header->name, fw_header->len, fw_header->num_module_entries);
 
+	new_num_fw_modules = ipc4_data->num_fw_modules + fw_header->num_module_entries;
+	ipc4_data->fw_modules = devm_krealloc(sdev->dev,
+								ipc4_data->fw_modules,
+								new_num_fw_modules * sizeof(*fw_module),
+								GFP_KERNEL);
+	if (!ipc4_data->fw_modules)
+		return -ENOMEM;
+
+	ipc4_data->base_fw_module_uuids = devm_krealloc(sdev->dev,
+									ipc4_data->base_fw_module_uuids,
+									new_num_fw_modules * sizeof(guid_t),
+									GFP_KERNEL);
+	if (!ipc4_data->base_fw_module_uuids)
+		return -ENOMEM;
+
+	old_num_fw_modules = ipc4_data->num_fw_modules;
+	ipc4_data->num_fw_modules = new_num_fw_modules;
+	fw_module = ipc4_data->fw_modules;
+	/* jump over the existing basefw modules */
+	fw_module += old_num_fw_modules;
+
 	fm_entry = (struct sof_man4_module *)((u8 *)fw_header + fw_header->len);
 	remaining -= fw_header->len;
 
@@ -73,6 +95,7 @@ static size_t sof_ipc4_lib_parse_ext_man(struct snd_sof_dev *sdev, const struct 
 	remaining -= (fw_header->num_module_entries * sizeof(*fm_entry));
 
 	for (i = 0; i < fw_header->num_module_entries; i++) {
+		memcpy(&fw_module->man4_module_entry, fm_entry, sizeof(*fm_entry));
 		if (fm_entry->cfg_count) {
 			if (remaining < (fm_entry->cfg_offset + fm_entry->cfg_count) *
 			    sizeof(*fm_config)) {
@@ -81,10 +104,22 @@ static size_t sof_ipc4_lib_parse_ext_man(struct snd_sof_dev *sdev, const struct 
 				return -EINVAL;
 			}
 
+			fw_module->bss_size = fm_config[fm_entry->cfg_offset].is_bytes;
+			guid_copy(&ipc4_data->base_fw_module_uuids[i], &fm_entry->uuid);
+
 			dev_dbg(sdev->dev,
 				"module %s: UUID %pUL cfg_count: %u\n",
 				fm_entry->name, &fm_entry->uuid, fm_entry->cfg_count);
+		} else {
+			fw_module->bss_size = 0;
+			dev_dbg(sdev->dev, "module %s: UUID %pUL\n", fm_entry->name,
+				&fm_entry->uuid);
 		}
+
+		fw_module->man4_module_entry.id = i;
+		ida_init(&fw_module->m_ida);
+		fw_module->private = NULL;
+		fw_module++;
 		fm_entry++;
 	}
 
