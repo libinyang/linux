@@ -116,7 +116,7 @@ static size_t sof_ipc4_lib_parse_ext_man(struct snd_sof_dev *sdev, const struct 
 				&fm_entry->uuid);
 		}
 
-		fw_module->man4_module_entry.id = i;
+		fw_module->man4_module_entry.id = i + 0x1000; //TBD: 1st fw base 0x0, second fw base 0x1000, third fw base 0x2000 ....
 		ida_init(&fw_module->m_ida);
 		fw_module->private = NULL;
 		fw_module++;
