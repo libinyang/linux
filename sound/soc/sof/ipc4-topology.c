@@ -1066,6 +1066,12 @@ static int sof_ipc4_init_audio_fmt(struct snd_sof_dev *sdev,
 				       sizeof(struct sof_ipc4_audio_format));
 			break;
 		}
+		/* the parameter never match hw_params because micsel will change the default params */
+		if (!strcmp(swidget->widget->name, "intelwov.15.1")) {
+			memcpy(base_config, &available_fmt->base_config[i],
+			       sizeof(struct sof_ipc4_base_module_cfg));
+			break;
+		}
 	}
 
 	if (i == available_fmt->audio_fmt_num) {
@@ -1731,6 +1737,10 @@ static int sof_ipc4_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget
 		msg->extension |= ipc_size >> 2;
 		msg->extension &= ~SOF_IPC4_MOD_EXT_DOMAIN_MASK;
 		msg->extension |= SOF_IPC4_MOD_EXT_DOMAIN(pipeline->lp_mode);
+	}
+	/* libin: change lp_mode */
+	if (!strcmp(swidget->widget->name, "intelwov.15.1")) {
+		msg->extension |= SOF_IPC4_MOD_EXT_DOMAIN(1);
 	}
 
 	msg->data_size = ipc_size;
