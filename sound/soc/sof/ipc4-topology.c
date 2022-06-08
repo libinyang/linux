@@ -6,6 +6,7 @@
 // Copyright(c) 2022 Intel Corporation. All rights reserved.
 //
 //
+#include <linux/firmware.h>
 #include <uapi/sound/sof/tokens.h>
 #include <sound/pcm_params.h>
 #include <sound/sof/ext_manifest4.h>
@@ -15,6 +16,7 @@
 #include "ipc4-priv.h"
 #include "ipc4-topology.h"
 #include "ops.h"
+#include "intelwov.h"
 
 #define SOF_IPC4_GAIN_PARAM_ID  0
 #define SOF_IPC4_TPLG_ABI_SIZE 6
@@ -908,7 +910,7 @@ static int sof_ipc4_widget_setup_comp_process(struct snd_sof_widget *swidget)
 	dump_available_audio_fmt(scomp->dev, &process->available_fmt);
 
 	switch (process->process_type) {
-	case SOF_PROCESS_KEYWORD_DETECT:
+	case SOF_PROCESS_KEYWORD_DETECT: {
 		struct sof_process_intelwov_cfg *cfg;
 
 		cfg = kzalloc(sizeof(struct sof_process_intelwov_cfg), GFP_KERNEL);
@@ -916,6 +918,7 @@ static int sof_ipc4_widget_setup_comp_process(struct snd_sof_widget *swidget)
 			goto free_available_fmt;
 		process->ipc_config_data = cfg;
 		break;
+	}
 	case SOF_PROCESS_KPB:	/* fallback */
 	default:
 		/* nothing to do */
@@ -1568,6 +1571,7 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 		process->ipc_config_size = sizeof(struct sof_ipc4_base_module_cfg);
 		break;
 	case SOF_PROCESS_KEYWORD_DETECT:
+	{
 		/* ipc_config_data is already set in ipc_setup(). */
 		struct sof_process_intelwov_cfg *cfg = process->ipc_config_data;
 		memcpy(&cfg->base_config, &process->base_config, sizeof(process->base_config));
@@ -1575,6 +1579,7 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 		dev_err(scomp->dev, "in %s %d ylb, prepare KWD, cpc_in_lp: %d\n", __func__, __LINE__, cfg->cpc_low_power_mode);
 		process->ipc_config_size = sizeof(struct sof_process_intelwov_cfg);
 		break;
+	}
 	default:
 		dev_err(scomp->dev, "process type %d not supported\n", process->process_type);
 		return -EINVAL;
@@ -1584,9 +1589,106 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 	return sof_ipc4_widget_assign_instance_id(sdev, swidget);
 }
 
+static int sof_ipc4_large_config_intelwov(struct snd_sof_widget *swidget)
+{
+	struct snd_soc_component *scomp = swidget->scomp;
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct intelwov_cfgblobheader2 *iw_bheader;
+	char *filename = "mykw.dsp";
+	const struct firmware *fw;
+	void *large_data, *p;
+	int ret;
+	int model_cnt = 1;
+	int header_size;
+	struct sof_ipc4_msg msg, msg2;
+
+	header_size = sizeof(struct intelwov_modelcfg) * model_cnt +
+			     sizeof(struct intelwov_cfgblobheader2);
+
+	iw_bheader = kzalloc(header_size, GFP_KERNEL);
+	iw_bheader->signature = INTEL_WOV_CFG_BLOB_SIG;
+	iw_bheader->model_count = 1;
+	iw_bheader->model_cfg->model_id = 0;
+	iw_bheader->model_cfg->kpd_sensitivity = 0x266;
+	iw_bheader->model_cfg->kpbuf_out_pin = 1;
+	iw_bheader->model_cfg->history_buffer_size_idle = 0x1f4;
+	iw_bheader->model_cfg->history_buffer_size_max = 0xbbb;
+
+	/* This is a temporary solution, will switch to kcontrol get binary blob */
+	ret = request_firmware(&fw, filename, swidget->scomp->dev);
+	if (ret) {
+		dev_err(swidget->scomp->dev, "in %s %d ylb, error request_firmware\n", __func__, __LINE__);
+		return ret;
+	}
+	iw_bheader->config_glob_size = fw->size;
+	//iw_bheader->config_glob_size = 0x800;
+	dev_err(swidget->scomp->dev, "in %s %d ylb, header size: %d, fw size: %ld\n", __func__, __LINE__, header_size, fw->size);
+
+	large_data = kzalloc(iw_bheader->config_glob_size + header_size, GFP_KERNEL);
+	p = large_data;
+	memcpy(p, iw_bheader, sizeof(struct intelwov_cfgblobheader2) + sizeof(struct intelwov_modelcfg) * model_cnt);
+	p = p + sizeof(struct intelwov_modelcfg) * model_cnt + sizeof(struct intelwov_cfgblobheader2);
+	memcpy(p, fw->data, iw_bheader->config_glob_size);
+
+	msg.primary = 0xc4001001;
+	msg.extension = 0x20200000 | (iw_bheader->config_glob_size + header_size);
+	msg.data_ptr = large_data;
+	msg.data_size = iw_bheader->config_glob_size + header_size;
+
+	sdev->ipc->ops->set_get_data(sdev, &msg, iw_bheader->config_glob_size + header_size, true);
+
+	kfree(large_data);
+	kfree(iw_bheader);
+
+
+	///////////////////////////////////
+	{
+		u32 larged[5] = {0x00000001, 0x00000000, 0x00000001};
+		msg2.primary = 0xC4001001;
+		msg2.extension = 0x3030000C;
+		msg2.data_ptr = larged;
+		msg2.data_size = 0xc;
+		sdev->ipc->ops->set_get_data(sdev, &msg2, 0xc, true);
+	}
+
+	return 0;
+}
+
+static int sof_ipc4_large_config_wov(struct snd_sof_widget *swidget)
+{
+	int ret = 0;
+	char uuid[UUID_STRING_LEN+1];
+
+	/* different modules have different config data */
+	snprintf(uuid, UUID_STRING_LEN+1, "%pUL", &swidget->uuid);
+
+	if (!strcmp(uuid, "EC774FA9-28D3-424A-90E4-69F984F1EEB7")) {
+		dev_err(swidget->scomp->dev, "in %s %d ylb, uuid: %pUL\n", __func__, __LINE__, &swidget->uuid);
+		ret = sof_ipc4_large_config_intelwov(swidget);
+	}
+
+	return ret;
+}
+
+
 static int sof_ipc4_large_config_process_module(struct snd_sof_widget *swidget)
 {
-	dev_err(swidget->scomp->dev, "in %s %d ylb\n", __func__, __LINE__);
+	struct sof_ipc4_process *process = swidget->private;
+
+	if (!process)
+		return -EINVAL;
+
+	switch (process->process_type) {
+	case SOF_PROCESS_KPB:
+		/* TBD */
+		break;
+	case SOF_PROCESS_KEYWORD_DETECT:
+		sof_ipc4_large_config_wov(swidget);
+		break;
+	default:
+		break;
+	}
+
 	return 0;
 }
 
