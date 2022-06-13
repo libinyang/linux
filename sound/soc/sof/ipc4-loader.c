@@ -193,6 +193,14 @@ static int sof_ipc4_query_fw_configuration(struct snd_sof_dev *sdev)
 			trace_sof_ipc4_fw_config(sdev, "Trace log size", *tuple->value);
 			ipc4_data->mtrace_log_bytes = *tuple->value;
 			break;
+		case SOF_IPC4_FW_CFG_MAX_LIBS_COUNT:
+			ipc4_data->max_fw_libs = *tuple->value;
+			ipc4_data->fw_lib_names = devm_kcalloc(sdev->dev, ipc4_data->max_fw_libs,
+							       LIBRARY_FILENAME_LEN, GFP_KERNEL);
+
+			if (!ipc4_data->fw_lib_names)
+				return -ENOMEM;
+			break;
 		default:
 			break;
 		}

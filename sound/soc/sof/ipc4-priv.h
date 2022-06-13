@@ -24,11 +24,16 @@ enum sof_ipc4_mtrace_type {
 	SOF_IPC4_MTRACE_INTEL_CAVS_2,
 };
 
+/* 5 chars for the .bin extension and the null terminator */
+#define LIBRARY_FILENAME_LEN (UUID_STRING_LEN + 5)
+
 /**
  * struct sof_ipc4_fw_data - IPC4-specific data
  * @manifest_fw_hdr_offset: FW header offset in the manifest
  * @num_fw_modules : Number of modules in base FW
  * @fw_modules: Array of base FW modules
+ * @max_fw_libs: Maximum number of module libraries supported by the FW
+ * @fw_lib_names: Array of module library names. This does not include the base FW
  * @nhlt: NHLT table either from the BIOS or the topology manifest
  * @mtrace_type: mtrace type supported on the booted platform
  * @mtrace_log_bytes: log bytes as reported by the firmware via fw_config reply
@@ -37,6 +42,8 @@ struct sof_ipc4_fw_data {
 	u32 manifest_fw_hdr_offset;
 	int num_fw_modules;
 	void *fw_modules;
+	u32 max_fw_libs;
+	char (*fw_lib_names)[LIBRARY_FILENAME_LEN];
 	void *nhlt;
 	enum sof_ipc4_mtrace_type mtrace_type;
 	u32 mtrace_log_bytes;
