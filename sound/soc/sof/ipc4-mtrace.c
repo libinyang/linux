@@ -405,9 +405,18 @@ static int ipc4_mtrace_enable(struct snd_sof_dev *sdev)
 	u64 system_time;
 	ktime_t kt;
 	int ret;
+	u32 data[3] = {0x00000016, 0x00000004, 0x00000780};
 
 	if (priv->mtrace_state != SOF_MTRACE_DISABLED)
 		return 0;
+
+	/* just a quirk, let's set gating policy */
+	msg.primary = 0x44000000;
+	msg.extension = 0x3070000c;
+	msg.data_ptr = data;
+	msg.data_size = 0xc;
+	sdev->ipc->ops->set_get_data(sdev, &msg, 0xc, true);
+	mdelay(100);
 
 	msg.primary = SOF_IPC4_MSG_TARGET(SOF_IPC4_MODULE_MSG);
 	msg.primary |= SOF_IPC4_MSG_DIR(SOF_IPC4_MSG_REQUEST);
