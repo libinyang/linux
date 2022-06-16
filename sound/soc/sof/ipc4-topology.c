@@ -25,7 +25,9 @@ static DEFINE_IDA(alh_group_ida);
 
 static const struct sof_topology_token ipc4_sched_tokens[] = {
 	{SOF_TKN_SCHED_LP_MODE, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
-		offsetof(struct sof_ipc4_pipeline, lp_mode)}
+		offsetof(struct sof_ipc4_pipeline, lp_mode)},
+	{SOF_TKN_SCHED_PRIORITY, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct sof_ipc4_pipeline, priority)},
 };
 
 static const struct sof_topology_token pipeline_tokens[] = {
@@ -33,6 +35,8 @@ static const struct sof_topology_token pipeline_tokens[] = {
 		offsetof(struct snd_sof_widget, dynamic_pipeline_widget)},
 	{SOF_TKN_SCHED_DEFER_ENABLE, SND_SOC_TPLG_TUPLE_TYPE_BOOL, get_token_u16,
 		offsetof(struct snd_sof_widget, defer_enable)},
+	{SOF_TKN_SCHED_HEAP_SIZE, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct snd_sof_widget, heap_size)},
 };
 
 static const struct sof_topology_token ipc4_comp_tokens[] = {
@@ -705,9 +709,12 @@ static int sof_ipc4_widget_setup_comp_pipeline(struct snd_sof_widget *swidget)
 		goto err;
 	}
 
-	/* TODO: Get priority from topology */
-	pipeline->priority = 0;
+	/* /\* TODO: Get priority from topology *\/ */
+	/* pipeline->priority = 0; */
 
+	dev_err(scomp->dev, "in %s %d ylb, pipeline '%s': id %d pri %d lp mode %d\n",
+			__func__, __LINE__, swidget->widget->name, swidget->pipeline_id,
+			pipeline->priority, pipeline->lp_mode);
 	dev_dbg(scomp->dev, "pipeline '%s': id %d pri %d lp mode %d\n",
 		swidget->widget->name, swidget->pipeline_id,
 		pipeline->priority, pipeline->lp_mode);
@@ -907,6 +914,13 @@ static int sof_ipc4_widget_setup_comp_process(struct snd_sof_widget *swidget)
 		goto free_available_fmt;
 	}
 
+	ret = sof_update_ipc_object(scomp, swidget, SOF_PIPELINE_TOKENS, swidget->tuples,
+				    swidget->num_tuples, sizeof(*swidget), 1);
+	if (ret) {
+		dev_err(scomp->dev, "parsing pipeline tokens failed\n");
+		goto free_available_fmt;
+	}
+
 	dump_available_audio_fmt(scomp->dev, &process->available_fmt);
 
 	switch (process->process_type) {
@@ -963,11 +977,11 @@ sof_ipc4_update_pipeline_mem_usage(struct snd_sof_dev *sdev, struct snd_sof_widg
 	int task_mem, queue_mem;
 	int ibs, bss, total;
 
+	dev_err(sdev->dev, "in %s %d ylb, swidget: %s is_pages: %d, heap_size: %d\n", __func__, __LINE__, swidget->widget->name, base_config->is_pages, swidget->heap_size);
 	ibs = base_config->ibs;
-	bss = base_config->is_pages;
 
 	task_mem = SOF_IPC4_PIPELINE_OBJECT_SIZE;
-	task_mem += SOF_IPC4_MODULE_INSTANCE_LIST_ITEM_SIZE + bss;
+	task_mem += SOF_IPC4_MODULE_INSTANCE_LIST_ITEM_SIZE;// + bss;
 
 	if (fw_module->man4_module_entry.type & SOF_IPC4_MODULE_LL) {
 		task_mem += SOF_IPC4_FW_ROUNDUP(SOF_IPC4_LL_TASK_OBJECT_SIZE);
@@ -981,7 +995,8 @@ sof_ipc4_update_pipeline_mem_usage(struct snd_sof_dev *sdev, struct snd_sof_widg
 	ibs = SOF_IPC4_FW_ROUNDUP(ibs);
 	queue_mem = SOF_IPC4_FW_MAX_QUEUE_COUNT * (SOF_IPC4_DATA_QUEUE_OBJECT_SIZE +  ibs);
 
-	total = SOF_IPC4_FW_PAGE(task_mem + queue_mem);
+	total = SOF_IPC4_FW_PAGE(task_mem + queue_mem) + swidget->heap_size;
+	dev_err(sdev->dev, "in %s %d ylb, is_pages: %d, ibs: %d, task_mem: %d, total: %d\n", __func__, __LINE__, base_config->is_pages, task_mem, queue_mem, total);
 
 	pipe_widget = swidget->pipe_widget;
 	pipeline = pipe_widget->private;
@@ -1044,6 +1059,7 @@ static int sof_ipc4_init_audio_fmt(struct snd_sof_dev *sdev,
 		return -EINVAL;
 	}
 
+	//dev_err(sdev->dev, "in %s %d ylb, %s, rate: %d, fmt: %#x, channel: %d\n", __func__, __LINE__, swidget->widget->name, params_rate(params), sample_valid_bits, params_channels(params));
 	/*
 	 * Search supported audio formats to match rate, channels ,and
 	 * sample_valid_bytes from runtime params
@@ -1054,6 +1070,7 @@ static int sof_ipc4_init_audio_fmt(struct snd_sof_dev *sdev,
 		rate = fmt->sampling_frequency;
 		channels = SOF_IPC4_AUDIO_FORMAT_CFG_CHANNELS_COUNT(fmt->fmt_cfg);
 		valid_bits = SOF_IPC4_AUDIO_FORMAT_CFG_V_BIT_DEPTH(fmt->fmt_cfg);
+		//dev_err(sdev->dev, "in %s %d ylb, found: rate: %d, fmt: %#x, channel: %d\n", __func__, __LINE__, rate, valid_bits, channels);
 		if (params_rate(params) == rate && params_channels(params) == channels &&
 		    sample_valid_bits == valid_bits) {
 			dev_dbg(sdev->dev, "%s: matching audio format index for %uHz, %ubit, %u channels: %d\n",
@@ -1612,7 +1629,7 @@ static int sof_ipc4_large_config_intelwov(struct snd_sof_widget *swidget)
 	iw_bheader->model_cfg->kpd_sensitivity = 0x266;
 	iw_bheader->model_cfg->kpbuf_out_pin = 1;
 	iw_bheader->model_cfg->history_buffer_size_idle = 0x1f4;
-	iw_bheader->model_cfg->history_buffer_size_max = 0xbbb;
+	iw_bheader->model_cfg->history_buffer_size_max = 0xbb8;
 
 	/* This is a temporary solution, will switch to kcontrol get binary blob */
 	ret = request_firmware(&fw, filename, swidget->scomp->dev);
@@ -2211,6 +2228,7 @@ static enum sof_tokens process_token_list[] = {
 	SOF_AUDIO_FMT_NUM_TOKENS,
 	SOF_IN_AUDIO_FORMAT_TOKENS,
 	SOF_AUDIO_FORMAT_BUFFER_SIZE_TOKENS,
+	SOF_PIPELINE_TOKENS,
 	SOF_PROCESS_TOKENS,
 	SOF_COMP_EXT_TOKENS,
 };

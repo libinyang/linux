@@ -84,6 +84,7 @@
 					 SOF_MTRACE_LOG_SOURCE_HAL |	 \
 					 SOF_MTRACE_LOG_SOURCE_MODULE |	 \
 					 SOF_MTRACE_LOG_SOURCE_AUDIO)
+//#define DEFAULT_LOGS_PRIORITIES_MASK	0xf2
 
 struct sof_log_state_info {
 	u32 aging_timer_period;

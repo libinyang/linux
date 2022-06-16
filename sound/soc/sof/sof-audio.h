@@ -381,6 +381,7 @@ struct snd_sof_widget {
 	 */
 	bool dynamic_pipeline_widget;
 	bool defer_enable;
+	u32 heap_size;
 
 	struct snd_soc_dapm_widget *widget;
 	struct list_head list;	/* list in sdev widget list */
