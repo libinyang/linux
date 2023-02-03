@@ -369,19 +369,25 @@ struct sof_ipc4_base_module_cfg_ext {
 /**
  * struct sof_ipc4_process - process config data
  * @base_config: IPC base config data
+ * @base_config_ext: Base config extension data for module init
  * @output_format: Output audio format
  * @available_fmt: Available audio format
  * @ipc_config_data: Process module config data
  * @ipc_config_size: Size of process module config data
+ * @base_config_ext_size: Size of the base config extension data in bytes
  * @msg: IPC4 message struct containing header and data info
+ * @add_base_cfg_ext: Flag indicating that the module needs the base config extension during init
  */
 struct sof_ipc4_process {
 	struct sof_ipc4_base_module_cfg base_config;
+	struct sof_ipc4_base_module_cfg_ext *base_config_ext;
 	struct sof_ipc4_audio_format output_format;
 	struct sof_ipc4_available_audio_format available_fmt;
 	void *ipc_config_data;
 	uint32_t ipc_config_size;
+	u32 base_config_ext_size;
 	struct sof_ipc4_msg msg;
+	bool add_base_cfg_ext;
 };
 
 #endif
