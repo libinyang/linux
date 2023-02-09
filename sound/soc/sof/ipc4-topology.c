@@ -247,6 +247,7 @@ static int sof_ipc4_get_audio_fmt(struct snd_soc_component *scomp,
 	dev_dbg(scomp->dev, "widget %s cpc: %d is_pages: %d\n",
 		swidget->widget->name, module_base_cfg->cpc, module_base_cfg->is_pages);
 
+	dev_err(scomp->dev, "in %s %d ylb, num_input_formats: %d, num_output_formats: %d\n", __func__, __LINE__, available_fmt->num_input_formats, available_fmt->num_output_formats);
 	if (available_fmt->num_input_formats) {
 		in_format = kcalloc(available_fmt->num_input_formats,
 				    sizeof(*in_format), GFP_KERNEL);
@@ -1026,7 +1027,7 @@ static int sof_ipc4_init_audio_fmt(struct snd_sof_dev *sdev,
 		dev_err(sdev->dev, "no formats available for %s\n", swidget->widget->name);
 		return -EINVAL;
 	}
-
+	dev_err(sdev->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	/*
 	 * Search supported audio formats with pin index 0 to match rate, channels ,and
 	 * sample_valid_bytes from runtime params
@@ -1047,20 +1048,21 @@ static int sof_ipc4_init_audio_fmt(struct snd_sof_dev *sdev,
 			break;
 		}
 	}
-
+	dev_err(sdev->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	if (i == pin_fmts_size) {
 		dev_err(sdev->dev, "%s: Unsupported audio format: %uHz, %ubit, %u channels\n",
 			__func__, params_rate(params), sample_valid_bits, params_channels(params));
 		return -EINVAL;
 	}
-
+	dev_err(sdev->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	/* copy input format */
 	memcpy(&base_config->audio_fmt, &available_fmt->input_pin_fmts[i].audio_fmt,
 	       sizeof(struct sof_ipc4_audio_format));
-
+	dev_err(sdev->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	/* set base_cfg ibs/obs */
 	base_config->ibs = available_fmt->input_pin_fmts[i].buffer_size;
-	base_config->obs = available_fmt->output_pin_fmts[i].buffer_size;
+	if (available_fmt->output_pin_fmts)
+		base_config->obs = available_fmt->output_pin_fmts[i].buffer_size;
 
 	dev_dbg(sdev->dev, "Init input audio formats for %s\n", swidget->widget->name);
 	sof_ipc4_dbg_audio_format(sdev->dev, &available_fmt->input_pin_fmts[i], 1);
@@ -1688,6 +1690,10 @@ sof_ipc4_process_set_pin_formats(struct snd_sof_widget *swidget, int pin_type)
 		 */
 		for (j = 0; j < format_list_count; j++) {
 			struct sof_ipc4_pin_format *pin_format_item = &format_list_to_search[j];
+			if (!format_list_to_search) {
+				dev_err(scomp->dev, "in %s %d ylb, no format list to search !!!!!!!!!!!!!!\n", __func__, __LINE__);
+				break;
+			}
 
 			if (pin_format_item->pin_index == i - pin_format_offset) {
 				*pin_format = *pin_format_item;
@@ -1731,7 +1737,7 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 	struct sof_ipc4_available_audio_format *available_fmt = &process->available_fmt;
 	void *cfg = process->ipc_config_data;
 	int ret;
-
+	dev_err(scomp->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	ret = sof_ipc4_init_audio_fmt(sdev, swidget, &process->base_config,
 				      pipeline_params, available_fmt,
 				      available_fmt->input_pin_fmts,
@@ -1739,8 +1745,10 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 	if (ret < 0)
 		return ret;
 
-	memcpy(&process->output_format, &available_fmt->output_pin_fmts[ret].audio_fmt,
-	       sizeof(struct sof_ipc4_audio_format));
+	dev_err(scomp->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
+	if (available_fmt->output_pin_fmts)
+		memcpy(&process->output_format, &available_fmt->output_pin_fmts[ret].audio_fmt,
+			   sizeof(struct sof_ipc4_audio_format));
 
 	/* update pipeline memory usage */
 	sof_ipc4_update_pipeline_mem_usage(sdev, swidget, &process->base_config);
@@ -1749,6 +1757,7 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 	memcpy(cfg, &process->base_config, sizeof(struct sof_ipc4_base_module_cfg));
 	cfg += sizeof(struct sof_ipc4_base_module_cfg);
 
+	dev_err(scomp->dev, "in %s %d ylb, %s\n", __func__, __LINE__, swidget->widget->name);
 	if (process->add_base_cfg_ext) {
 		struct sof_ipc4_base_module_cfg_ext *base_cfg_ext = process->base_config_ext;
 
@@ -1757,6 +1766,15 @@ static int sof_ipc4_prepare_process_module(struct snd_sof_widget *swidget,
 			return ret;
 
 		memcpy(cfg, base_cfg_ext, process->base_config_ext_size);
+	}
+
+	 /* Hack: Update pipeline param for mic_sel module */
+	if (!strcmp(swidget->widget->name, "micsel.18.1")) {
+		/* Change the channel to any number needed, here I use 1 */
+		dev_err(scomp->dev, "in %s %d ylb, update the pipeline hw_params for %s\n", __func__, __LINE__, swidget->widget->name);
+		hw_param_interval(pipeline_params, SNDRV_PCM_HW_PARAM_CHANNELS)->min = 1;
+		hw_param_interval(pipeline_params, SNDRV_PCM_HW_PARAM_CHANNELS)->max = 1;
+		dev_err(scomp->dev, "in %s %d ylb, update the pipeline hw_params\n", __func__, __LINE__);
 	}
 
 	return 0;
